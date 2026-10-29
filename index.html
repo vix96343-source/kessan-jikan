@@ -43,7 +43,7 @@ h1 { margin: 0; font-size: 22px; letter-spacing: .05em; }
 .slot { display: grid; grid-template-columns: 150px 1fr; border: 1px solid var(--line); border-radius: 10px;
   background: var(--card); margin: 0 0 10px; overflow: hidden; }
 .slot .when { background: var(--card-head); border-right: 1px solid var(--line); padding: 6px 12px;
-  display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; }
+  display: flex; flex-wrap: wrap; align-items: center; align-content: flex-start; column-gap: 8px; }
 .slot .when .t { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.3; }
 .slot .when .c { color: var(--muted); font-size: 12px; }
 .slot .when .tag { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 10px; }
@@ -67,9 +67,12 @@ h1 { margin: 0; font-size: 22px; letter-spacing: .05em; }
 .co .code { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; flex: none; width: 38px; }
 .co .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .co .kind { color: var(--muted); font-size: 11px; flex: none; }
-.co .same { margin-left: auto; flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.co .same { flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .co .same.shaky { color: var(--amber); }
 .co.done .name::before { content: "✓ "; color: var(--green); font-weight: 700; }
+.co .ir { flex: none; font-size: 11px; font-weight: 700; color: var(--blue); border: 1px solid var(--blue); border-radius: 4px;
+  padding: 0 5px; text-decoration: none; }
+.co .prev { flex: none; font-size: 11px; color: var(--amber); }
 .empty { color: var(--muted); padding: 40px 0; text-align: center; }
 footer { color: var(--muted); font-size: 12px; line-height: 1.8; padding: 24px 0 48px; border-top: 1px solid var(--line); margin-top: 30px; }
 </style>
@@ -91,7 +94,8 @@ footer { color: var(--muted); font-size: 12px; line-height: 1.8; padding: 24px 0
       <span><b style="color:var(--amber)">■</b> 場中(15:00前)</span>
       <span><b style="color:var(--green)">■</b> 発表済み(実際の時刻)</span>
       <span><b style="color:var(--blue)">■</b> 次の発表</span>
-      <span>右端の数字 = 目安の時刻が過去の短信で何回あったか(<b style="color:var(--amber)">黄色</b>は時刻がよく変わる会社)</span>
+      <span><b style="color:var(--blue)">IR</b> = 会社のIRカレンダーに載っている予定時刻</span>
+      <span>数字 = 目安の時刻が過去の短信で何回あったか(<b style="color:var(--amber)">黄色</b>は時刻がよく変わる会社)</span>
     </div>
   </div>
 </div>
@@ -99,7 +103,8 @@ footer { color: var(--muted); font-size: 12px; line-height: 1.8; padding: 24px 0
 <div class="wrap">
   <footer>
     発表日は JPX の決算発表予定日(翌営業日〜5営業日先、プライム・スタンダード、毎日更新)。<br>
-    時刻: 発表済み(✓)は TDnet に決算短信が出た実際の時刻(1分ごとに監視)。それ以外は過去の決算短信の時刻で、目安です(前回と前々回が同じならその時刻、違う会社は去年の同じ四半期の時刻。会社が変えることがあります)。
+    時刻: 発表済み(✓)は TDnet に決算短信が出た実際の時刻(1分ごとに監視)。<b>IR</b> は会社の IR カレンダーに書かれている予定時刻(1日1回見直し、「前回」は前回の短信と時刻が違うもの)。
+    それ以外は過去の決算短信の時刻で、目安です(前回と前々回が同じならその時刻、違う会社は去年の同じ四半期の時刻。会社が変えることがあります)。
     過去の短信 1,336 回で試すと、目安どおりの時刻に出たのは全体で約86%、過去の 3/4 以上が同じ時刻の会社では約92%でした。<br>
     「時刻過ぎ」は目安の時刻を過ぎてもまだ TDnet に出ていない枠です。会社名にマウスを乗せると過去のほかの時刻が出ます。<br>
     出所: JPX、TDnet(過去の時刻は IRBANK 経由)。データは1分ごとに読み直します。
@@ -130,10 +135,14 @@ function renderDays() {
 }
 
 function company(r) {
-  const tip = [r.name, r.same && `過去 ${r.same} 回がこの時刻`, r.others && `ほか ${r.others}`].filter(Boolean).join(" / ");
+  const tip = [r.name, r.src === "ir" ? "会社のIRカレンダーの予定時刻" : r.same && `過去 ${r.same} 回がこの時刻`,
+    r.prev && `前回は ${r.prev}`, r.others && `過去のほかの時刻 ${r.others}`].filter(Boolean).join(" / ");
+  const right = r.done ? "" : r.src === "ir"
+    ? `${r.prev ? `<span class="prev">前回${esc(r.prev)}</span>` : ""}<a class="ir" href="${esc(r.ir_url)}" target="_blank" rel="noopener">IR</a>`
+    : `<span class="same${r.same && !r.steady ? " shaky" : ""}">${esc(r.same)}</span>`;
   return `<div class="co${r.done ? " done" : ""}" title="${esc(tip)}">
     <span class="code">${esc(r.code)}</span><span class="name">${esc(r.name)}</span><span class="kind">${esc(r.kind.replace("決算", ""))}</span>
-    <span class="same${r.same && !r.steady ? " shaky" : ""}">${r.done ? "" : esc(r.same)}</span></div>`;
+    <span style="margin-left:auto;display:flex;gap:6px;align-items:baseline">${right}</span></div>`;
 }
 
 function renderList() {
