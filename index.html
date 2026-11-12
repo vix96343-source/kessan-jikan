@@ -67,6 +67,7 @@ h1 { margin: 0; font-size: 22px; letter-spacing: .05em; }
 .co .code { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; flex: none; width: 38px; }
 .co .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .co .kind { color: var(--muted); font-size: 11px; flex: none; }
+.co .cap { color: var(--muted); font-size: 11px; flex: none; font-variant-numeric: tabular-nums; }
 .co .same { flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .co .same.shaky { color: var(--amber); }
 .co.done .name::before { content: "✓ "; color: var(--green); font-weight: 700; }
@@ -95,6 +96,7 @@ footer { color: var(--muted); font-size: 12px; line-height: 1.8; padding: 24px 0
       <span><b style="color:var(--green)">■</b> 発表済み(実際の時刻)</span>
       <span><b style="color:var(--blue)">■</b> 次の発表</span>
       <span><b style="color:var(--blue)">IR</b> = 会社のIRカレンダーに載っている予定時刻</span>
+      <span>同じ時刻の中は時価総額の大きい順(100億円以下は非表示)</span>
       <span>数字 = 目安の時刻が過去の短信で何回あったか(<b style="color:var(--amber)">黄色</b>は時刻がよく変わる会社)</span>
     </div>
   </div>
@@ -107,11 +109,13 @@ footer { color: var(--muted); font-size: 12px; line-height: 1.8; padding: 24px 0
     それ以外は過去の決算短信の時刻で、目安です(前回と前々回が同じならその時刻、違う会社は去年の同じ四半期の時刻。会社が変えることがあります)。
     過去の短信 1,336 回で試すと、目安どおりの時刻に出たのは全体で約86%、過去の 3/4 以上が同じ時刻の会社では約92%でした。<br>
     「時刻過ぎ」は目安の時刻を過ぎてもまだ TDnet に出ていない枠です。会社名にマウスを乗せると過去のほかの時刻が出ます。<br>
-    出所: JPX、TDnet(過去の時刻は IRBANK 経由)。データは1分ごとに読み直します。
+    同じ時刻の枠の中は時価総額の大きい順で、時価総額100億円以下の会社は出していません(時価総額は IRBANK の決算スケジュール、6時間ごとに更新。分からない会社は枠の最後に出します)。<br>
+    出所: JPX、TDnet(過去の時刻・時価総額は IRBANK 経由)。データは1分ごとに読み直します。
   </footer>
 </div>
 <script>
 const SRC = "https://vix96343-source.github.io/kessan-hantei/data/calendar.json";
+const MIN_CAP = 100;      // 時価総額(億円)がこれ以下の会社は出さない(分からない会社は出す)
 const state = { data: null, day: "", intra: false, pending: false, q: "" };
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -120,6 +124,10 @@ function jstNow() {
   const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit",
     day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date()).map(x => [x.type, x.value]));
   return { date: `${p.year}-${p.month}-${p.day}`, time: `${p.hour === "24" ? "00" : p.hour}:${p.minute}` };
+}
+function capLabel(v) {
+  if (v == null) return "";
+  return v >= 10000 ? `${(v / 10000).toFixed(v >= 100000 ? 0 : 1)}兆` : `${Math.round(v).toLocaleString()}億`;
 }
 function dlabel(d) {
   const x = new Date(d + "T00:00:00+09:00");
@@ -135,13 +143,13 @@ function renderDays() {
 }
 
 function company(r) {
-  const tip = [r.name, r.src === "ir" ? "会社のIRカレンダーの予定時刻" : r.same && `過去 ${r.same} 回がこの時刻`,
+  const tip = [r.name, r.mcap != null && `時価総額 ${capLabel(r.mcap)}円`, r.src === "ir" ? "会社のIRカレンダーの予定時刻" : r.same && `過去 ${r.same} 回がこの時刻`,
     r.prev && `前回は ${r.prev}`, r.others && `過去のほかの時刻 ${r.others}`].filter(Boolean).join(" / ");
   const right = r.done ? "" : r.src === "ir"
     ? `${r.prev ? `<span class="prev">前回${esc(r.prev)}</span>` : ""}<a class="ir" href="${esc(r.ir_url)}" target="_blank" rel="noopener">IR</a>`
     : `<span class="same${r.same && !r.steady ? " shaky" : ""}">${esc(r.same)}</span>`;
   return `<div class="co${r.done ? " done" : ""}" title="${esc(tip)}">
-    <span class="code">${esc(r.code)}</span><span class="name">${esc(r.name)}</span><span class="kind">${esc(r.kind.replace("決算", ""))}</span>
+    <span class="code">${esc(r.code)}</span><span class="name">${esc(r.name)}</span><span class="cap">${capLabel(r.mcap)}</span><span class="kind">${esc(r.kind.replace("決算", ""))}</span>
     <span style="margin-left:auto;display:flex;gap:6px;align-items:baseline">${right}</span></div>`;
 }
 
@@ -160,11 +168,12 @@ function renderList() {
       if (!slots.has(k)) slots.set(k, []);
       slots.get(k).push(r);
     }
+    for (const rs of slots.values()) rs.sort((a, b) => (b.mcap ?? -1) - (a.mcap ?? -1));   // 同じ時刻は時価総額の大きい順
     const keys = [...slots.keys()].sort((a, b) => (a || "99").localeCompare(b || "99"));
     const today = d.date === now.date;
     const next = today ? keys.find(k => k && k >= now.time && slots.get(k).some(r => !r.done)) : null;
     const intra = d.rows.filter(r => r.intraday).length, done = d.rows.filter(r => r.done).length;
-    html += `<section class="day"><h2>${dlabel(d.date)}${today ? " 今日" : ""}<span class="n">${d.rows.length}社 · 場中 ${intra}社${done ? ` · 発表済み ${done}社` : ""}</span></h2>`;
+    html += `<section class="day"><h2>${dlabel(d.date)}${today ? " 今日" : ""}<span class="n">${d.rows.length}社 · 場中 ${intra}社${done ? ` · 発表済み ${done}社` : ""}${d.small ? ` · 時価総額${MIN_CAP}億円以下の ${d.small}社は非表示` : ""}</span></h2>`;
     for (const k of keys) {
       const rs = slots.get(k), allDone = rs.every(r => r.done);
       const late = today && k && k < now.time && rs.some(r => !r.done);
@@ -184,7 +193,14 @@ async function load() {
   try {
     const res = await fetch(`${SRC}?t=${Date.now()}`, { cache: "no-store" });
     if (!res.ok) throw new Error(res.status);
-    state.data = await res.json();
+    const data = await res.json();
+    // 時価総額 MIN_CAP 億円以下の会社は出さない
+    for (const d of data.days) {
+      const all = d.rows.length;
+      d.rows = d.rows.filter(r => r.mcap == null || r.mcap > MIN_CAP);
+      d.small = all - d.rows.length;
+    }
+    state.data = data;
     const n = jstNow();
     $("updated").textContent = `${n.time} 更新`;
     $("dot").classList.add("live");
