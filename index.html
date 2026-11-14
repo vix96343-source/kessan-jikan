@@ -67,6 +67,8 @@ h1 { margin: 0; font-size: 22px; letter-spacing: .05em; }
 .co .code { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; flex: none; width: 38px; }
 .co .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .co .kind { color: var(--muted); font-size: 11px; flex: none; }
+.co .good { flex: none; font-size: 11px; font-weight: 700; color: #e0b84a; }
+.co.goodprev { background: rgba(224, 184, 74, .08); box-shadow: inset 3px 0 0 #e0b84a; }
 .co .cap { color: var(--muted); font-size: 11px; flex: none; font-variant-numeric: tabular-nums; }
 .co .same { flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .co .same.shaky { color: var(--amber); }
@@ -144,12 +146,15 @@ function renderDays() {
 
 function company(r) {
   const tip = [r.name, r.mcap != null && `時価総額 ${capLabel(r.mcap)}円`, r.src === "ir" ? "会社のIRカレンダーの予定時刻" : r.same && `過去 ${r.same} 回がこの時刻`,
-    r.prev && `前回は ${r.prev}`, r.others && `過去のほかの時刻 ${r.others}`].filter(Boolean).join(" / ");
+    r.prev && `前回は ${r.prev}`, r.others && `過去のほかの時刻 ${r.others}`,
+    r.prev_good && `前回 ${r.prev_good.period} が好決算: ${r.prev_good.hits.join("・")}${r.prev_good.streak > 1 ? `(${r.prev_good.streak}四半期連続)` : ""}`].filter(Boolean).join(" / ");
+  // 前回(直近の四半期)が好決算(判定君の good_rules.yaml の基準)なら「前回◎」と枠の色
+  const good = r.prev_good ? `<span class="good">前回◎${r.prev_good.streak > 1 ? "×" + r.prev_good.streak : ""}</span>` : "";
   const right = r.done ? "" : r.src === "ir"
     ? `${r.prev ? `<span class="prev">前回${esc(r.prev)}</span>` : ""}<a class="ir" href="${esc(r.ir_url)}" target="_blank" rel="noopener">IR</a>`
     : `<span class="same${r.same && !r.steady ? " shaky" : ""}">${esc(r.same)}</span>`;
-  return `<div class="co${r.done ? " done" : ""}" title="${esc(tip)}">
-    <span class="code">${esc(r.code)}</span><span class="name">${esc(r.name)}</span><span class="cap">${capLabel(r.mcap)}</span><span class="kind">${esc(r.kind.replace("決算", ""))}</span>
+  return `<div class="co${r.done ? " done" : ""}${r.prev_good ? " goodprev" : ""}" title="${esc(tip)}">
+    <span class="code">${esc(r.code)}</span><span class="name">${esc(r.name)}</span>${good}<span class="cap">${capLabel(r.mcap)}</span><span class="kind">${esc(r.kind.replace("決算", ""))}</span>
     <span style="margin-left:auto;display:flex;gap:6px;align-items:baseline">${right}</span></div>`;
 }
 
